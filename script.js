@@ -1,118 +1,311 @@
-(()=>{"use strict";
-const $=id=>document.getElementById(id), file=$("file"), upload=$("upload"), out=$("out"), name=$("name"), status=$("status"), details=$("details"), warnings=$("warnings"), convert=$("convert"), download=$("download"), preview=$("preview"), screen=$("screen");
-let source=null,result=null,base="layout";
-upload.onclick=()=>file.click();
-file.onchange=()=>{if(file.files[0])load(file.files[0])};
-function setStatus(c,t,d){status.className=c;status.textContent=t;details.textContent=d||""}
-function load(f){source=f;base=f.name.replace(/\.json$/i,"")||"layout";name.textContent=f.name;out.hidden=false;convert.hidden=true;download.hidden=true;preview.hidden=true;warnings.innerHTML="";
-f.text().then(t=>{let d;try{d=JSON.parse(t)}catch(e){setStatus("err","❌ Invalid layout file.","The file is not valid JSON.");return}
-if(isNew(d)){source=d;result=d;setStatus("ok","✓ This layout is already compatible with Zalith Launcher 2.",count(d)+" controls");showPreview(d);download.hidden=false;return}
-if(!isOld(d)){setStatus("err","❌ Unsupported layout format.","The file is not a supported Zalith Launcher 1 / PojavLauncher layout.");return}
-source=d;setStatus("warn","Detected: Zalith Launcher 1 / PojavLauncher","Press Convert to transform it.");convert.hidden=false;
-convert.onclick=()=>{try{const converted=convertOld(d);result=converted.data;setStatus("ok","✓ Conversion successful",converted.count+" controls converted");warnings.innerHTML="";for(const w of converted.warnings){const x=document.createElement("div");x.className="warning";x.textContent="⚠ "+w;warnings.appendChild(x)}showPreview(result);download.hidden=false;convert.hidden=true}catch(e){setStatus("err","❌ Conversion failed.",e.message)}}
-}).catch(()=>setStatus("err","❌ Invalid layout file.","The file could not be read."))}
-function isNew(d){return d&&d.editorVersion===12&&d.info&&Array.isArray(d.layers)&&Array.isArray(d.styles)}
-function isOld(d){return d&&Array.isArray(d.mControlDataList)}
-function count(d){return(d.layers||[]).reduce((n,l)=>n+(l.normalButtons?.length||0)+(l.textBoxes?.length||0)+(l.joystickButtons?.length||0),0)}
-const K={32:"GLFW_KEY_SPACE",44:"GLFW_KEY_COMMA",45:"GLFW_KEY_MINUS",46:"GLFW_KEY_PERIOD",61:"GLFW_KEY_EQUAL",65:"GLFW_KEY_A",66:"GLFW_KEY_B",67:"GLFW_KEY_C",68:"GLFW_KEY_D",69:"GLFW_KEY_E",70:"GLFW_KEY_F",71:"GLFW_KEY_G",72:"GLFW_KEY_H",73:"GLFW_KEY_I",74:"GLFW_KEY_J",75:"GLFW_KEY_K",76:"GLFW_KEY_L",77:"GLFW_KEY_M",78:"GLFW_KEY_N",79:"GLFW_KEY_O",80:"GLFW_KEY_P",81:"GLFW_KEY_Q",82:"GLFW_KEY_R",83:"GLFW_KEY_S",84:"GLFW_KEY_T",85:"GLFW_KEY_U",86:"GLFW_KEY_V",87:"GLFW_KEY_W",88:"GLFW_KEY_X",89:"GLFW_KEY_Y",90:"GLFW_KEY_Z",256:"GLFW_KEY_ESCAPE",257:"GLFW_KEY_ENTER",258:"GLFW_KEY_TAB",259:"GLFW_KEY_BACKSPACE",260:"GLFW_KEY_INSERT",261:"GLFW_KEY_DELETE",262:"GLFW_KEY_RIGHT",263:"GLFW_KEY_LEFT",264:"GLFW_KEY_DOWN",265:"GLFW_KEY_UP",290:"GLFW_KEY_F1",291:"GLFW_KEY_F2",292:"GLFW_KEY_F3",293:"GLFW_KEY_F4",294:"GLFW_KEY_F5",295:"GLFW_KEY_F6",296:"GLFW_KEY_F7",297:"GLFW_KEY_F8",298:"GLFW_KEY_F9",299:"GLFW_KEY_F10",300:"GLFW_KEY_F11",301:"GLFW_KEY_F12",266:"GLFW_KEY_PAGE_UP",267:"GLFW_KEY_PAGE_DOWN",340:"GLFW_KEY_LEFT_SHIFT",341:"GLFW_KEY_LEFT_CONTROL",342:"GLFW_KEY_LEFT_ALT",344:"GLFW_KEY_RIGHT_SHIFT",345:"GLFW_KEY_RIGHT_CONTROL",346:"GLFW_KEY_RIGHT_ALT"};
-const SPECIAL={"-1":{type:"launcher_event",key:"launcher.event.switch_ime"},"-2":{type:"launcher_event",key:"launcher.event.switch_menu"},"-3":{type:"launcher_event",key:"GLFW_MOUSE_BUTTON_LEFT"},"-4":{type:"launcher_event",key:"GLFW_MOUSE_BUTTON_RIGHT"},"-5":null,"-6":{type:"launcher_event",key:"GLFW_MOUSE_BUTTON_MIDDLE"},"-7":{type:"launcher_event",key:"launcher.event.scroll_up"},"-8":{type:"launcher_event",key:"launcher.event.scroll_down"},"-9":{type:"launcher_event",key:"launcher.event.switch_menu"}};
-function uid(){return crypto.randomUUID?crypto.randomUUID().replaceAll("-",""):Math.random().toString(36).slice(2)+Date.now()}
-function tr(v){return{default:v==null||v==="null"?"":String(v),matchQueue:[]}}
-function clamp(n,a,b){return Math.max(a,Math.min(b,n))}
-function referenceMetrics(){
- const d=Math.max(1,Math.min(4,Number(window.devicePixelRatio)||1));
- const a=Math.max(1,Number(window.innerWidth)||360)*d;
- const b=Math.max(1,Number(window.innerHeight)||800)*d;
- return{W:Math.max(a,b),H:Math.min(a,b),density:d};
-}
-function effectiveDp(v){
- const raw=Number(v)||50;
- const savedScale=Number(source?.scaledAt);
- const factor=Number.isFinite(savedScale)&&savedScale>0?100/savedScale:1;
- return Math.max(5,raw*factor);
-}
-function evalExpr(s,b){
- if(typeof s==="number")return s;
- if(typeof s!=="string"||!s.trim())return NaN;
- const m=referenceMetrics(),W=m.W,H=m.H;
- const width=effectiveDp(b.width)*m.density;
- const height=effectiveDp(b.height)*m.density;
- const margin=2*m.density;
- const scale=100;
- let e=s.replace(/\$\{screen_width\}/g,String(W)).replace(/\$\{screen_height\}/g,String(H))
-  .replace(/\$\{width\}/g,String(width)).replace(/\$\{height\}/g,String(height))
-  .replace(/\$\{margin\}/g,String(margin)).replace(/\$\{preferred_scale\}/g,String(scale))
-  .replace(/\$\{right\}/g,String(W-width)).replace(/\$\{bottom\}/g,String(H-height))
-  .replace(/\$\{top\}/g,"0").replace(/\$\{left\}/g,"0");
- e=e.replace(/px\(([-+]?(?:\d+(?:\.\d*)?|\.\d+))\)/g,"($1*"+m.density+")");
- if(!/^[0-9eE+\-*/().\s*]+$/.test(e))return NaN;
- try{return Function('"use strict";return('+e+')')()}catch(_){return NaN}
-}
-function position(b,w){
- const m=referenceMetrics();
- const width=effectiveDp(b.width)*m.density;
- const height=effectiveDp(b.height)*m.density;
- const x=evalExpr(b.dynamicX,b),y=evalExpr(b.dynamicY,b);
- if(!Number.isFinite(x)||!Number.isFinite(y))w.push("A control has an unsupported dynamic position expression; its position was estimated.");
- const availableW=Math.max(1,m.W-width),availableH=Math.max(1,m.H-height);
- return{
-  x:Math.round(clamp((Number.isFinite(x)?x:availableW/2)/availableW*10000,0,10000)),
-  y:Math.round(clamp((Number.isFinite(y)?y:availableH/2)/availableH*10000,0,10000))
- }
-}
-function events(b,w){
- const a=[];
- for(const raw of b.keycodes||[]){const n=Number(raw);if(!n)continue;
-  if(K[n])a.push({type:"key",key:K[n]});
-  else if(n<0&&SPECIAL[String(n)])a.push(SPECIAL[String(n)]);
-  else if(n===-5)w.push("The legacy virtual-mouse control has no direct Zalith 2 click-event equivalent.");
-  else if(n<0)w.push("A legacy special keycode "+n+" could not be mapped.");
-  else w.push("A control uses unknown GLFW keycode "+n+".")
- }
- return a
-}
-function styleFor(b,sid){
- const alpha=Number.isFinite(Number(b.opacity))?clamp(Number(b.opacity),0,1):1;
- const bg=Number.isFinite(Number(b.bgColor))?Number(b.bgColor)>>>0:0x4d000000;
- const stroke=Number.isFinite(Number(b.strokeColor))?Number(b.strokeColor)>>>0:0xffffffff;
- const sw=Number.isFinite(Number(b.strokeWidth))?Math.max(0,Number(b.strokeWidth)):0;
- const radius=Number.isFinite(Number(b.cornerRadius))?Math.max(0,Number(b.cornerRadius)):0;
- const r={topStart:radius,topEnd:radius,bottomEnd:radius,bottomStart:radius};
- return{name:"Converted "+sid.slice(0,8),uuid:sid,animateSwap:false,commonStyle:true,lightStyle:{alpha,pressedAlpha:Math.min(1,alpha+0.1),backgroundColor:bg,pressedBackgroundColor:bg,contentColor:0xffffffff,pressedContentColor:0xffffffff,borderWidth:Math.round(sw),pressedBorderWidth:Math.round(sw),borderColor:stroke,pressedBorderColor:stroke,borderRadius:r,pressedBorderRadius:r},darkStyle:{alpha,pressedAlpha:Math.min(1,alpha+0.1),backgroundColor:bg,pressedBackgroundColor:bg,contentColor:0xffffffff,pressedContentColor:0xffffffff,borderWidth:Math.round(sw),pressedBorderWidth:Math.round(sw),borderColor:stroke,pressedBorderColor:stroke,borderRadius:r,pressedBorderRadius:r}}
-}
-function buttonSize(b){
- const wd=effectiveDp(b.width);
- const hd=effectiveDp(b.height);
- return{
-  type:"dp",
-  widthDp:wd,
-  heightDp:hd,
-  widthPercentage:100,
-  heightPercentage:100,
-  widthReference:"screen_height",
-  heightReference:"screen_height"
- }
-}
-function visibility(b){return b.displayInGame&&b.displayInMenu?"always":b.displayInGame?"in_game":"in_menu"}
-function convertOld(d){
- source=d;
- const w=[],styles=[],normal=[],joysticks=[];
- for(const b of d.mControlDataList||[]){
-  const sid=uid(),ev=events(b,w);styles.push(styleFor(b,sid));
-  normal.push({text:tr(b.name),uuid:uid(),position:position(b,w),buttonSize:buttonSize(b),buttonStyle:sid,visibilityType:visibility(b),clickEvents:ev,isSwipple:!!b.isSwipeable,isPenetrable:!!b.passThruEnabled,isToggleable:!!b.isToggle})
- }
- const joystickStyleId=uid();
- const joysticksource=d.mJoystickDataList?.[0]||{};
- const joystickAlpha=Math.max(0,Math.min(1,Number(joysticksource.opacity)||1));
- const joystickStyle={name:"Converted Joystick",uuid:joystickStyleId,commonStyle:true,lightStyle:{alpha:joystickAlpha,backgroundColor:1291845633,joystickColor:2147483775,joystickCanLockColor:2164195583,joystickLockedColor:2164195327,lockMarkColor:4294967295,borderWidthRatio:0,borderColor:4294967295,backgroundShape:50,joystickShape:50,joystickSize:0.5},darkStyle:{alpha:joystickAlpha,backgroundColor:1291845633,joystickColor:2147483775,joystickCanLockColor:2164195583,joystickLockedColor:2164195327,lockMarkColor:4294967295,borderWidthRatio:0,borderColor:4294967295,backgroundShape:50,joystickShape:50,joystickSize:0.5}};
- for(const j of d.mJoystickDataList||[]){
-  const size=Math.max(20,Number(j.width)||Number(j.height)||200);
-  joysticks.push({uuid:uid(),position:position(j,w),sizeType:"dp",sizeDp:size,sizePercentage:100,visibilityType:visibility(j),joystickStyleId,deadZoneRatio:0.5,lockThreshold:0.3,canLock:!!j.forwardLock,triggerMode:"DRAG",directionEvents:{north:[{type:"key",key:"GLFW_KEY_W"}],north_east:[{type:"key",key:"GLFW_KEY_W"},{type:"key",key:"GLFW_KEY_D"}],north_west:[{type:"key",key:"GLFW_KEY_W"},{type:"key",key:"GLFW_KEY_A"}],south:[{type:"key",key:"GLFW_KEY_S"}],south_east:[{type:"key",key:"GLFW_KEY_S"},{type:"key",key:"GLFW_KEY_D"}],south_west:[{type:"key",key:"GLFW_KEY_S"},{type:"key",key:"GLFW_KEY_A"}],east:[{type:"key",key:"GLFW_KEY_D"}],west:[{type:"key",key:"GLFW_KEY_A"}]},lockEvents:[{type:"key",key:"GLFW_KEY_LEFT_CONTROL"}]});
- }
- if((d.mDrawerDataList||[]).length)w.push("Legacy control drawers are not directly supported by Zalith 2 and were not converted.");
- const i=d.mControlInfoDataList||{},r={info:{name:tr(i.name&&i.name!=="null"?i.name:base),author:tr(i.author&&i.author!=="null"?i.author:""),description:tr(i.desc&&i.desc!=="null"?i.desc:""),versionCode:0,versionName:String(i.version&&i.version!=="null"?i.version:"1.0")},layers:[{name:"converted",uuid:uid(),hide:false,hideWhenMouse:true,hideWhenGamepad:true,visibilityType:"always",normalButtons:normal,textBoxes:[],joystickButtons:joysticks}],styles,joystickStyles:[joystickStyle],editorVersion:12};
- return{data:r,count:normal.length+joysticks.length,warnings:w}
-}
-function showPreview(d){screen.innerHTML="";for(const l of d.layers||[])for(const b of(l.normalButtons||[]).slice(0,80)){const e=document.createElement("div");e.className="control";e.textContent=b.text?.default||"";e.style.left=(b.position.x/100)+"%";e.style.top=(b.position.y/100)+"%";e.style.width=Math.max(2,(b.buttonSize?.widthPercentage||500)/100)+"%";e.style.height=Math.max(2,(b.buttonSize?.heightPercentage||500)/100)+"%";screen.appendChild(e)}preview.hidden=false}
-download.onclick=()=>{if(!result)return;const blob=new Blob([JSON.stringify(result,null,2)],{type:"application/json"}),u=URL.createObjectURL(blob),a=document.createElement("a");a.href=u;a.download=base+"-zalith2.json";document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(u)}
+"use strict";
+
+/* ---------- GLFW key names (standard GLFW codes) ---------- */
+const GLFW_NAMES = (() => {
+  const m = {
+    32: "SPACE", 39: "APOSTROPHE", 44: "COMMA", 45: "MINUS", 46: "PERIOD", 47: "SLASH",
+    59: "SEMICOLON", 61: "EQUAL", 91: "LEFT_BRACKET", 92: "BACKSLASH", 93: "RIGHT_BRACKET",
+    96: "GRAVE_ACCENT", 256: "ESCAPE", 257: "ENTER", 258: "TAB", 259: "BACKSPACE",
+    260: "INSERT", 261: "DELETE", 262: "RIGHT", 263: "LEFT", 264: "DOWN", 265: "UP",
+    266: "PAGE_UP", 267: "PAGE_DOWN", 268: "HOME", 269: "END", 280: "CAPS_LOCK",
+    281: "SCROLL_LOCK", 282: "NUM_LOCK", 283: "PRINT_SCREEN", 284: "PAUSE",
+    330: "KP_DECIMAL", 331: "KP_DIVIDE", 332: "KP_MULTIPLY", 333: "KP_SUBTRACT",
+    334: "KP_ADD", 335: "KP_ENTER", 336: "KP_EQUAL", 340: "LEFT_SHIFT",
+    341: "LEFT_CONTROL", 342: "LEFT_ALT", 343: "LEFT_SUPER", 344: "RIGHT_SHIFT",
+    345: "RIGHT_CONTROL", 346: "RIGHT_ALT", 347: "RIGHT_SUPER", 348: "MENU",
+  };
+  for (let i = 0; i < 10; i++) { m[48 + i] = String(i); m[320 + i] = "KP_" + i; }
+  for (let i = 0; i < 26; i++) m[65 + i] = String.fromCharCode(65 + i);
+  for (let i = 0; i < 25; i++) m[290 + i] = "F" + (i + 1);
+  return m;
 })();
+
+/* ZL1 special buttons -> ZL2 launcher events. -2 (GUI toggle) and -5 (virtual mouse) have no equivalent. */
+const SPECIAL = {
+  "-1": ["launcher_event", "launcher.event.switch_ime"],
+  "-3": ["launcher_event", "GLFW_MOUSE_BUTTON_LEFT"],
+  "-4": ["launcher_event", "GLFW_MOUSE_BUTTON_RIGHT"],
+  "-6": ["launcher_event", "GLFW_MOUSE_BUTTON_MIDDLE"],
+  "-7": ["launcher_event", "launcher.event.scroll_up.single"],
+  "-8": ["launcher_event", "launcher.event.scroll_down.single"],
+  "-9": ["launcher_event", "launcher.event.switch_menu"],
+};
+
+/* ---------- safe math evaluator (no eval) for ZL1 dynamicX / dynamicY ---------- */
+function evalMath(str, fns) {
+  let i = 0;
+  const ws = () => { while (i < str.length && /\s/.test(str[i])) i++; };
+  const expect = (c) => {
+    ws();
+    if (str[i] !== c) throw new Error(`Expected '${c}' at ${i} in: ${str}`);
+    i++;
+  };
+  function expr() {
+    let v = term(); ws();
+    while (str[i] === "+" || str[i] === "-") {
+      const op = str[i++]; const r = term();
+      v = op === "+" ? v + r : v - r; ws();
+    }
+    return v;
+  }
+  function term() {
+    let v = unary(); ws();
+    while (str[i] === "*" || str[i] === "/") {
+      const op = str[i++]; const r = unary();
+      v = op === "*" ? v * r : v / r; ws();
+    }
+    return v;
+  }
+  function unary() {
+    ws();
+    if (str[i] === "-") { i++; return -unary(); }
+    if (str[i] === "+") { i++; return unary(); }
+    return primary();
+  }
+  function primary() {
+    ws();
+    if (str[i] === "(") { i++; const v = expr(); expect(")"); return v; }
+    const rest = str.slice(i);
+    const num = /^(\d+\.?\d*|\.\d+)(e[+-]?\d+)?/i.exec(rest);
+    if (num) { i += num[0].length; return parseFloat(num[0]); }
+    const fn = /^([a-z_]+)\s*\(/i.exec(rest);
+    if (fn) {
+      if (!fns[fn[1]]) throw new Error("Unknown function: " + fn[1]);
+      i += fn[0].length;
+      const arg = expr(); expect(")");
+      return fns[fn[1]](arg);
+    }
+    throw new Error(`Unexpected token at ${i} in: ${str}`);
+  }
+  const result = expr(); ws();
+  if (i !== str.length) throw new Error(`Trailing input at ${i} in: ${str}`);
+  return result;
+}
+
+/* ---------- helpers ---------- */
+const hex = (n) => {
+  const b = new Uint8Array(Math.ceil(n / 2));
+  crypto.getRandomValues(b);
+  return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("").slice(0, n);
+};
+const argb = (v) => v >>> 0;
+
+/* ZL1 draws a white overlay (alpha 60/255) while a button is pressed */
+function overWhite(c, aw = 60 / 255) {
+  const al = ((c >>> 24) & 255) / 255;
+  const r = (c >>> 16) & 255, g = (c >>> 8) & 255, b = c & 255;
+  const oa = aw + al * (1 - aw);
+  const f = (x) => Math.round((255 * aw + x * al * (1 - aw)) / oa);
+  return (((Math.round(oa * 255) << 24) | (f(r) << 16) | (f(g) << 8) | f(b)) >>> 0);
+}
+
+/* ---------- conversion ---------- */
+function convert(src, o) {
+  const { W, H, D, scale } = o;
+  const margin = Math.trunc(2 * D);
+  const scaledAt = src.scaledAt || 100;
+  const warnings = [];
+  const styles = [];
+  const styleKey = new Map();
+  const checks = [];
+  const fns = { px: (v) => v * D, dp: (v) => v / D };
+
+  const evaluate = (expr, wPx, hPx) => {
+    const vars = {
+      top: 0, left: 0, right: W - wPx, bottom: H - hPx, width: wPx, height: hPx,
+      screen_width: W, screen_height: H, margin, preferred_scale: scale,
+    };
+    const filled = String(expr).replace(/\$\{(\w+)\}/g, (_, n) => {
+      if (!(n in vars)) throw new Error("Unknown variable: " + n);
+      return "(" + vars[n] + ")";
+    });
+    return evalMath(filled, fns);
+  };
+
+  const events = (keycodes, label) => {
+    const out = [];
+    for (const k of keycodes || []) {
+      if (k === 0) continue;
+      if (SPECIAL[k]) out.push({ type: SPECIAL[k][0], key: SPECIAL[k][1] });
+      else if (GLFW_NAMES[k]) out.push({ type: "key", key: "GLFW_KEY_" + GLFW_NAMES[k] });
+      else warnings.push(`'${label}': keycode ${k} has no ZL2 equivalent (dropped)`);
+    }
+    return out;
+  };
+
+  const getStyle = (d, wPx, hPx) => {
+    const radius = Math.min(100, Math.round((Math.min(wPx, hPx) / 2) * (d.cornerRadius || 0)) / 100);
+    const bw = Math.round(d.strokeWidth || 0);
+    const key = JSON.stringify([d.opacity, d.bgColor, d.strokeColor, bw, radius]);
+    if (styleKey.has(key)) return styleKey.get(key);
+    const shape = { topStart: radius, topEnd: radius, bottomEnd: radius, bottomStart: radius };
+    const bg = argb(d.bgColor), stroke = argb(d.strokeColor);
+    const cfg = {
+      alpha: d.opacity, pressedAlpha: d.opacity,
+      backgroundColor: bg, pressedBackgroundColor: overWhite(bg),
+      contentColor: 0xFFFFFFFF, pressedContentColor: 0xFFFFFFFF,
+      fontSize: 14, pressedFontSize: 14,
+      borderWidth: bw, pressedBorderWidth: bw,
+      borderColor: stroke, pressedBorderColor: stroke,
+      borderRadius: shape, pressedBorderRadius: shape,
+    };
+    const id = hex(12);
+    styles.push({
+      name: "Style " + (styles.length + 1), uuid: id, animateSwap: false,
+      commonStyle: true, lightStyle: cfg, darkStyle: cfg,
+    });
+    styleKey.set(key, id);
+    return id;
+  };
+
+  const position = (d, wPx, hPx, label) => {
+    const dx = d.dynamicX ?? String(d.x ?? 0);
+    const dy = d.dynamicY ?? String(d.y ?? 0);
+    if (d.dynamicX == null) warnings.push(`'${label}': old format without dynamicX, used raw x/y as pixels`);
+    const x = evaluate(dx, wPx, hPx), y = evaluate(dy, wPx, hPx);
+    const fx = W > wPx ? x / (W - wPx) : 0;
+    const fy = H > hPx ? y / (H - hPx) : 0;
+    if (!(fx >= 0 && fx <= 1 && fy >= 0 && fy <= 1)) {
+      warnings.push(`'${label}': off-screen (x=${Math.round(x)}, y=${Math.round(y)}px), clamped`);
+    }
+    const c = (v) => Math.min(Math.max(v, 0), 1);
+    return { pos: { x: Math.round(c(fx) * 10000), y: Math.round(c(fy) * 10000) }, x, y };
+  };
+
+  const vis = (d) => {
+    const g = !!d.displayInGame, m = !!d.displayInMenu;
+    return g === m ? "always" : g ? "in_game" : "in_menu";
+  };
+
+  const buttons = [];
+  for (const d of src.mControlDataList || []) {
+    const label = d.name ?? "";
+    const wdp = (d.width / scaledAt) * scale, hdp = (d.height / scaledAt) * scale;
+    const wPx = wdp * D, hPx = hdp * D;
+    const p = position(d, wPx, hPx, label);
+    buttons.push({
+      text: { default: label.trim(), matchQueue: [] },
+      uuid: hex(18),
+      position: p.pos,
+      buttonSize: {
+        type: "dp", widthDp: Math.max(5, wdp), heightDp: Math.max(5, hdp),
+        widthPercentage: Math.max(100, Math.min(10000, Math.round((wPx / H) * 10000))),
+        heightPercentage: Math.max(100, Math.min(10000, Math.round((hPx / H) * 10000))),
+        widthReference: "screen_height", heightReference: "screen_height",
+      },
+      buttonStyle: getStyle(d, wPx, hPx),
+      textAlignment: "Center", textBold: false, textItalic: false, textUnderline: false,
+      visibilityType: vis(d),
+      clickEvents: events(d.keycodes, label),
+      isSwipple: !!d.isSwipeable, isPenetrable: !!d.passThruEnabled, isToggleable: !!d.isToggle,
+    });
+    checks.push([p.x, p.y, wPx, hPx, p.pos]);
+  }
+
+  const joysticks = [];
+  for (const d of src.mJoystickDataList || []) {
+    const wdp = (d.width / scaledAt) * scale;
+    const wPx = wdp * D, hPx = ((d.height / scaledAt) * scale) * D;
+    const p = position(d, wPx, hPx, "joystick");
+    joysticks.push({
+      uuid: hex(18), position: p.pos, sizeType: "dp", sizeDp: Math.max(20, wdp),
+      sizePercentage: Math.max(2000, Math.round((wPx / H) * 10000)),
+      visibilityType: vis(d),
+    });
+    checks.push([p.x, p.y, wPx, hPx, p.pos]);
+  }
+
+  if ((src.mDrawerDataList || []).length) {
+    warnings.push(`${src.mDrawerDataList.length} drawer(s) not converted (no ZL2 equivalent)`);
+  }
+
+  const info = src.mControlInfoDataList || {};
+  const clean = (v) => (v == null || v === "null" ? "" : v);
+  const ts = (s) => ({ default: s, matchQueue: [] });
+  const layout = {
+    info: {
+      name: ts(o.name || clean(info.name) || "layout"),
+      author: ts(clean(info.author)),
+      description: ts(clean(info.desc)),
+      versionCode: 1, versionName: "1.0",
+    },
+    layers: [{
+      name: "Layer 1", uuid: hex(12), hide: false, hideWhenMouse: true, hideWhenGamepad: true,
+      visibilityType: "always", normalButtons: buttons, textBoxes: [], joystickButtons: joysticks,
+    }],
+    styles, joystickStyles: [], editorVersion: 12,
+  };
+
+  let worst = 0;
+  for (const [x, y, w, h, pos] of checks) {
+    worst = Math.max(worst,
+      Math.abs((W - w) * pos.x / 10000 - x),
+      Math.abs((H - h) * pos.y / 10000 - y));
+  }
+  return { layout, warnings, stats: { buttons: buttons.length, joysticks: joysticks.length, styles: styles.length, worst } };
+}
+
+/* ---------- UI ---------- */
+if (typeof document !== "undefined") {
+  const $ = (id) => document.getElementById(id);
+  let src = null, srcName = "layout", out = null;
+
+  const showError = (msg) => { $("error").textContent = msg; $("error").hidden = false; };
+  const clearError = () => { $("error").hidden = true; };
+
+  $("file").addEventListener("change", async (e) => {
+    const f = e.target.files[0];
+    out = null; $("result").hidden = true; clearError();
+    if (!f) return;
+    try {
+      const data = JSON.parse(await f.text());
+      if (data.editorVersion != null) throw new Error("This already looks like a ZL2 layout.");
+      if (!Array.isArray(data.mControlDataList)) throw new Error("Not a Zalith 1 / Pojav layout (mControlDataList missing).");
+      src = data;
+      srcName = f.name.replace(/\.json$/i, "");
+      $("fileLabel").textContent = f.name;
+      $("name").value = $("name").value || srcName;
+      $("fileInfo").textContent =
+        `${data.mControlDataList.length} buttons, ${(data.mJoystickDataList || []).length} joystick(s), version ${data.version ?? "?"}`;
+      $("convert").disabled = false;
+    } catch (err) {
+      src = null; $("convert").disabled = true; $("fileInfo").textContent = "";
+      showError(err.message);
+    }
+  });
+
+  $("convert").addEventListener("click", () => {
+    clearError();
+    const num = (id) => parseFloat($(id).value);
+    const o = { W: num("w"), H: num("h"), D: num("density"), scale: num("scale"), name: $("name").value.trim() };
+    if (![o.W, o.H, o.D, o.scale].every((v) => Number.isFinite(v) && v > 0)) {
+      showError("Screen width, height, density and scale must be positive numbers.");
+      return;
+    }
+    try {
+      const r = convert(src, o);
+      out = r.layout;
+      $("summary").textContent =
+        `${r.stats.buttons} buttons, ${r.stats.joysticks} joystick(s), ${r.stats.styles} styles. ` +
+        `Max position error: ${r.stats.worst.toFixed(2)}px.`;
+      const ul = $("warnings");
+      ul.replaceChildren(...r.warnings.map((w) => { const li = document.createElement("li"); li.textContent = w; return li; }));
+      $("result").hidden = false;
+    } catch (err) {
+      showError("Conversion failed: " + err.message);
+    }
+  });
+
+  $("download").addEventListener("click", () => {
+    if (!out) return;
+    const blob = new Blob([JSON.stringify(out, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    const base = ($("name").value.trim() || srcName).replace(/[^\w.-]+/g, "_");
+    a.href = URL.createObjectURL(blob);
+    a.download = base + "_zl2.json";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+}
+
+if (typeof module !== "undefined") module.exports = { convert, evalMath };
