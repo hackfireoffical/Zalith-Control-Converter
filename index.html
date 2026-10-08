@@ -1,1 +1,55 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b0b0d"><title>Zalith Control Converter</title><link rel="stylesheet" href="style.css"></head><body><main><header><div class="logo">ZC</div><h1>Zalith Control Converter</h1><p>Convert old Zalith Launcher / PojavLauncher layouts to Zalith Launcher 2.</p></header><section class="card"><input id="file" type="file" accept=".json,application/json" hidden><button id="upload">Upload Layout</button><div id="name"></div><div id="out" hidden><div id="status"></div><div id="details"></div><div id="warnings"></div><div id="preview" hidden><small>Preview</small><div id="screen"></div></div><button id="convert" class="secondary" hidden>Convert</button><button id="download" hidden>Download Layout</button></div></section><p class="privacy">Your layout files are processed locally in your browser and are never uploaded.</p></main><script src="script.js?v=8"></script></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Zalith Control Converter</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Zalith Control Converter</h1>
+      <p class="sub">Zalith Launcher 1 / Pojav layout &rarr; Zalith Launcher 2. Runs fully in your browser, nothing is uploaded.</p>
+    </header>
+
+    <section class="card">
+      <h2>1. Pick your ZL1 layout</h2>
+      <label class="file">
+        <input type="file" id="file" accept=".json,application/json">
+        <span id="fileLabel">Choose .json file</span>
+      </label>
+      <p id="fileInfo" class="hint"></p>
+    </section>
+
+    <section class="card">
+      <h2>2. Reference screen</h2>
+      <p class="hint">Positions in ZL1 are math expressions, so they are evaluated for this screen (landscape, in pixels). Sizes stay exact in dp.</p>
+      <div class="grid">
+        <label>Width (px)<input type="number" id="w" value="2400" min="1" step="1" inputmode="numeric"></label>
+        <label>Height (px)<input type="number" id="h" value="1080" min="1" step="1" inputmode="numeric"></label>
+        <label>Density<input type="number" id="density" value="2.75" min="0.5" step="0.01" inputmode="decimal"></label>
+        <label>ZL1 button scale<input type="number" id="scale" value="100" min="1" step="1" inputmode="numeric"></label>
+      </div>
+      <label class="wide">Layout name<input type="text" id="name" placeholder="main"></label>
+    </section>
+
+    <section class="card">
+      <h2>3. Convert</h2>
+      <button id="convert" disabled>Convert</button>
+      <div id="result" hidden>
+        <p id="summary" class="ok"></p>
+        <ul id="warnings"></ul>
+        <button id="download" class="secondary">Download ZL2 layout</button>
+      </div>
+      <p id="error" class="err" hidden></p>
+    </section>
+
+    <footer>
+      <p>Schema derived from ZalithLauncher2 <code>LayerController</code> (editor version 12) and ZalithLauncher <code>ControlData</code>.</p>
+    </footer>
+  </main>
+  <script src="script.js"></script>
+</body>
+</html>
